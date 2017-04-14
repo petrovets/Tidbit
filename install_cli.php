@@ -44,7 +44,7 @@ require_once('include/entryPoint.php');
 set_time_limit(0);
 
 /* Are we going to use this? */
-$recordsPerPage = 1000;
+$recordsPerPage = 100;
 $relQueryCount = 0;
 
 require_once('install_config.php');
