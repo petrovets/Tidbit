@@ -35,13 +35,10 @@
  * "Powered by SugarCRM".
  ********************************************************************************/
 
-require_once dirname(__FILE__) . '/bootstrap.php';
-
-require_once 'Tidbit/Generator/KBDocument.php';
-
-$gen = new Tidbit_Generator_KBDocument(
-    new KBDocument(),
-    new KBDocumentRevision(),
-    new KBContent()
+$GLOBALS['dataTool']['Opportunities']['amount'] = array('range' => array('min' => 500, 'max' => 1000000));
+$GLOBALS['dataTool']['Opportunities']['amount_usdollar'] = array('range' => array('min' => 500, 'max' => 1000000));
+$GLOBALS['dataTool']['Opportunities']['account_id'] = array('related' => array('module' => 'Accounts'));
+// this is added to deal with IBM SFA customization redefining some type
+$GLOBALS['dataTool']['Opportunities']['probability'] = array(
+    'range' => array('min' => 0, 'max' => 100)
 );
-$gen->generate(100);

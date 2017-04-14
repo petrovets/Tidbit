@@ -35,13 +35,13 @@
  * "Powered by SugarCRM".
  ********************************************************************************/
 
-require_once dirname(__FILE__) . '/bootstrap.php';
-
-require_once 'Tidbit/Generator/KBDocument.php';
-
-$gen = new Tidbit_Generator_KBDocument(
-    new KBDocument(),
-    new KBDocumentRevision(),
-    new KBContent()
+/* TODO - use two multiplicative-reference operators combined with a sum
+ * to evaluate subtotals */
+$GLOBALS['dataTool']['ProductBundles']['bundle_stage'] = array('value' => "'Negotiation'");
+$GLOBALS['dataTool']['ProductBundles']['subtotal_usdollar'] = array('same' => 'subtotal');
+$GLOBALS['dataTool']['ProductBundles']['shipping_usdollar'] = array('same' => 'shipping');
+$GLOBALS['dataTool']['ProductBundles']['tax_usdollar'] = array('same' => 'tax');
+$GLOBALS['dataTool']['ProductBundles']['total'] = array('sum' => array('subtotal', 'shipping', 'tax'));
+$GLOBALS['dataTool']['ProductBundles']['total_usdollar'] = array(
+    'sum' => array('subtotal_usdollar', 'shipping_usdollar', 'tax_usdollar')
 );
-$gen->generate(100);

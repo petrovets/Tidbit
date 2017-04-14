@@ -2,7 +2,7 @@
 
 /*********************************************************************************
  * Tidbit is a data generation tool for the SugarCRM application developed by
- * SugarCRM, Inc. Copyright (C) 2004-2016 SugarCRM Inc.
+ * SugarCRM, Inc. Copyright (C) 2004-2010 SugarCRM Inc.
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Affero General Public License version 3 as published by the
@@ -35,13 +35,90 @@
  * "Powered by SugarCRM".
  ********************************************************************************/
 
-require_once dirname(__FILE__) . '/bootstrap.php';
+namespace Sugarcrm\Tidbit;
 
-require_once 'Tidbit/Generator/KBDocument.php';
+use Sugarcrm\Tidbit\StorageAdapter\Storage\Common;
 
-$gen = new Tidbit_Generator_KBDocument(
-    new KBDocument(),
-    new KBDocumentRevision(),
-    new KBContent()
-);
-$gen->generate(100);
+/**
+ * Class-container of generated data to adopt it for Storage Adapters
+ */
+class InsertBuffer
+{
+    /**
+     * Default number of object for saving per transaction
+     *
+     * @var int
+     */
+    const BUFFER_SIZE_DEFAULT = 20;
+
+    /**
+     * @var string
+     */
+    protected $tableName = '';
+
+    /**
+     * @var array
+     */
+    protected $installData = array();
+
+
+    /**
+     * @var Common
+     */
+    protected $storage;
+
+    /**
+     * Constructor
+     *
+     * @param string $tableName
+     * @param Common $storage
+     * @param int $bufferSize
+     */
+    public function __construct($tableName, $storage, $bufferSize = 0)
+    {
+        $this->tableName = $tableName;
+        $this->storage = $storage;
+        $this->bufferSize = $bufferSize ? $bufferSize : static::BUFFER_SIZE_DEFAULT;
+    }
+
+    /**
+     * @param array $installData
+     */
+    public function addInstallData($installData)
+    {
+        $this->installData[] = $installData;
+        if (count($this->installData) >= $this->bufferSize) {
+            $this->makeSave();
+        }
+    }
+
+    /**
+     * Clear data to save
+     */
+    public function clear()
+    {
+        $this->installData = array();
+    }
+
+    /**
+     * Destructor
+     *
+     */
+    public function __destruct()
+    {
+        // if we save by chunks we can get remainder of not saved records in
+        // the end of saving
+        if ($this->tableName && $this->installData) {
+            $this->makeSave();
+        }
+    }
+
+    /**
+     * rtfn
+     */
+    protected function makeSave()
+    {
+        $this->storage->save($this->tableName, $this->installData);
+        $this->clear();
+    }
+}

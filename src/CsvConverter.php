@@ -2,7 +2,7 @@
 
 /*********************************************************************************
  * Tidbit is a data generation tool for the SugarCRM application developed by
- * SugarCRM, Inc. Copyright (C) 2004-2016 SugarCRM Inc.
+ * SugarCRM, Inc. Copyright (C) 2004-2010 SugarCRM Inc.
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Affero General Public License version 3 as published by the
@@ -35,13 +35,66 @@
  * "Powered by SugarCRM".
  ********************************************************************************/
 
-require_once dirname(__FILE__) . '/bootstrap.php';
+namespace Sugarcrm\Tidbit;
 
-require_once 'Tidbit/Generator/KBDocument.php';
+use Sugarcrm\Tidbit\StorageAdapter\Storage\Csv;
 
-$gen = new Tidbit_Generator_KBDocument(
-    new KBDocument(),
-    new KBDocumentRevision(),
-    new KBContent()
-);
-$gen->generate(100);
+/**
+ * Class for convert tables from db to csv
+ */
+class CsvConverter
+{
+    /**
+     * @var \DBManager
+     */
+    protected $db;
+
+    /**
+     * @var Csv
+     */
+    protected $csvAdapter;
+
+    /**
+     * Size of insert buffer
+     *
+     * @var int
+     */
+    protected $insertBatchSize;
+
+    /**
+     * CsvConverter constructor.
+     *
+     * @param \DBManager $db
+     * @param Csv $csvAdapter
+     * @param int $insertBatchSize
+     */
+    public function __construct(\DBManager $db, Csv $csvAdapter, $insertBatchSize)
+    {
+        $this->db = $db;
+        $this->csvAdapter = $csvAdapter;
+        $this->insertBatchSize = $insertBatchSize;
+    }
+
+    /**
+     * Gets data from table fields and place it into csv file
+     *
+     * @param string $tableName
+     * @param array $fieldsArr
+     */
+    public function convert($tableName, array $fieldsArr = array())
+    {
+        $insertBuffer = new InsertBuffer($tableName, $this->csvAdapter, $this->insertBatchSize);
+
+        $fields = empty($fieldsArr) ? '*' : join(',', $fieldsArr);
+        $sql = "SELECT " . $fields . " FROM " . $tableName;
+        $result = $this->db->query($sql);
+
+        while ($row = $this->db->fetchByAssoc($result)) {
+            foreach ($row as $k => $v) {
+                $row[$k] = "'" . $v . "'";
+            }
+            $insertBuffer->addInstallData($row);
+        }
+
+    }
+}

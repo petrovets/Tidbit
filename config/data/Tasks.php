@@ -35,13 +35,15 @@
  * "Powered by SugarCRM".
  ********************************************************************************/
 
-require_once dirname(__FILE__) . '/bootstrap.php';
+$GLOBALS['dataTool']['Tasks']['contact_id'] = array('related' => array('module' => 'Contacts'));
+$GLOBALS['dataTool']['Tasks']['parent_id'] = array('related' => array('module' => 'Accounts'));
+$GLOBALS['dataTool']['Tasks']['parent_type'] = array('value' => "'Accounts'");
+$GLOBALS['dataTool']['Tasks']['status'] = array('meeting_probability' => true);
+$GLOBALS['dataTool']['Tasks']['contact_phone'] = array('phone' => true);
 
-require_once 'Tidbit/Generator/KBDocument.php';
-
-$gen = new Tidbit_Generator_KBDocument(
-    new KBDocument(),
-    new KBDocumentRevision(),
-    new KBContent()
+/* We want tasks to be in the past 90% of the time. */
+$GLOBALS['dataTool']['Tasks']['date'] = array(
+    'range'    => array('min' => -400, 'max' => 36),
+    'type'     => 'date',
+    'basetime' => time(),
 );
-$gen->generate(100);

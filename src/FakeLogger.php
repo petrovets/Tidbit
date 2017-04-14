@@ -35,13 +35,33 @@
  * "Powered by SugarCRM".
  ********************************************************************************/
 
-require_once dirname(__FILE__) . '/bootstrap.php';
+namespace Sugarcrm\Tidbit;
 
-require_once 'Tidbit/Generator/KBDocument.php';
+/**
+ * Class FakeLogger
+ *
+ * Fake all logging object usage
+ * Make it extend LoggerManager so type hinting will work for Sugar code
+ *
+ * @package Sugarcrm\Tidbit
+ */
+class FakeLogger extends \LoggerManager
+{
+    /**
+     * FakeLogger constructor.
+     * Override default private constructor for LoggerManager
+     */
+    public function __construct()
+    {
+    }
 
-$gen = new Tidbit_Generator_KBDocument(
-    new KBDocument(),
-    new KBDocumentRevision(),
-    new KBContent()
-);
-$gen->generate(100);
+    /**
+     * Fake all log calls
+     *
+     * @param $m
+     * @param $a
+     */
+    public function __call($m, $a)
+    {
+    }
+}

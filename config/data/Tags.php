@@ -35,13 +35,8 @@
  * "Powered by SugarCRM".
  ********************************************************************************/
 
-require_once dirname(__FILE__) . '/bootstrap.php';
-
-require_once 'Tidbit/Generator/KBDocument.php';
-
-$gen = new Tidbit_Generator_KBDocument(
-    new KBDocument(),
-    new KBDocumentRevision(),
-    new KBContent()
-);
-$gen->generate(100);
+$GLOBALS['dataTool']['Tags']['name_lower'] = array('same' => 'name', 'toLower' => true);
+$GLOBALS['dataTool']['Tags']['description'] = array('value' => "null");
+$GLOBALS['dataTool']['Tags']['source_id'] = array('value' => "null");
+$GLOBALS['dataTool']['Tags']['source_type'] = array('value' => "null");
+$GLOBALS['dataTool']['Tags']['source_meta'] = array('value' => "null");

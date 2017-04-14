@@ -35,13 +35,30 @@
  * "Powered by SugarCRM".
  ********************************************************************************/
 
-require_once dirname(__FILE__) . '/bootstrap.php';
+$GLOBALS['dataTool']['Calls']['contact_id'] = array('related' => array('module' => 'Contacts'));
+$GLOBALS['dataTool']['Calls']['parent_id'] = array('related' => array('module' => 'Accounts'));
+$GLOBALS['dataTool']['Calls']['parent_type'] = array('value' => "'Accounts'");
 
-require_once 'Tidbit/Generator/KBDocument.php';
-
-$gen = new Tidbit_Generator_KBDocument(
-    new KBDocument(),
-    new KBDocumentRevision(),
-    new KBContent()
+// Durations in Minutes will be 30 mins, hours from 0 to 8 (selected random)
+$GLOBALS['dataTool']['Calls']['duration_minutes'] = array('value' => "'30'");
+$GLOBALS['dataTool']['Calls']['duration_hours'] = array('range' => array('min' => 0, 'max' => 8));
+/* We want calls to be in the past 90% of the time. */
+/* Start should be always bigger than end */
+$GLOBALS['dataTool']['Calls']['date_start'] = array(
+    'range' => array('min' => -400, 'max' => 36),
+    'type' => 'datetime',
+    'basetime' => time()
 );
-$gen->generate(100);
+$GLOBALS['dataTool']['Calls']['date_end'] = array(
+    'same_datetime' => 'date_start',
+    'modify' => array(
+        'hours' => array(
+            'field' => 'duration_hours'
+        ),
+        'minutes' => '30'
+    )
+);
+
+$GLOBALS['dataTool']['Calls']['status'] = array('meeting_probability' => true);
+$GLOBALS['dataTool']['Calls']['reminder_time'] = array('value' => -1);
+$GLOBALS['dataTool']['Calls']['email_reminder_time'] = array('value' => -1);

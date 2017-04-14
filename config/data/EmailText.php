@@ -35,13 +35,12 @@
  * "Powered by SugarCRM".
  ********************************************************************************/
 
-require_once dirname(__FILE__) . '/bootstrap.php';
-
-require_once 'Tidbit/Generator/KBDocument.php';
-
-$gen = new Tidbit_Generator_KBDocument(
-    new KBDocument(),
-    new KBDocumentRevision(),
-    new KBContent()
-);
-$gen->generate(100);
+$GLOBALS['dataTool']['EmailText']['email_id'] = array('related' => array('module' => 'Emails'));
+$GLOBALS['dataTool']['EmailText']['from_addr'] = array('list' => 'last_name_array', 'suffix' => "@example.com");
+$GLOBALS['dataTool']['EmailText']['reply_to_addr'] = array('value' => null);
+$GLOBALS['dataTool']['EmailText']['to_addrs'] = array('list' => 'last_name_array', 'suffix' => "@example.com");
+$GLOBALS['dataTool']['EmailText']['cc_addrs'] = array('value' => null);
+$GLOBALS['dataTool']['EmailText']['bcc_addrs'] = array('value' => null);
+$GLOBALS['dataTool']['EmailText']['description'] = array('gibberish' => -1);
+$GLOBALS['dataTool']['EmailText']['description_html'] = array('value' => null);
+$GLOBALS['dataTool']['EmailText']['raw_source'] = array('value' => null);

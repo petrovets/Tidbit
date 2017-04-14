@@ -1,8 +1,7 @@
 <?php
-
 /*********************************************************************************
  * Tidbit is a data generation tool for the SugarCRM application developed by
- * SugarCRM, Inc. Copyright (C) 2004-2016 SugarCRM Inc.
+ * SugarCRM, Inc. Copyright (C) 2004-2010 SugarCRM Inc.
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Affero General Public License version 3 as published by the
@@ -35,13 +34,49 @@
  * "Powered by SugarCRM".
  ********************************************************************************/
 
-require_once dirname(__FILE__) . '/bootstrap.php';
+namespace Sugarcrm\Tidbit\StorageAdapter\Storage;
 
-require_once 'Tidbit/Generator/KBDocument.php';
+use Sugarcrm\Tidbit\Exception;
+use Sugarcrm\Tidbit\StorageAdapter\Factory;
 
-$gen = new Tidbit_Generator_KBDocument(
-    new KBDocument(),
-    new KBDocumentRevision(),
-    new KBContent()
-);
-$gen->generate(100);
+class Mysql extends Common
+{
+    /**
+     * @var string
+     */
+    const STORE_TYPE = Factory::OUTPUT_TYPE_MYSQL;
+
+    /**
+     * {@inheritdoc}
+     *
+     */
+    public function save($tableName, array $installData)
+    {
+        $sql = $this->prepareQuery($tableName, $installData);
+        $this->logQuery($sql);
+        $this->storageResource->query($sql, true, "INSERT QUERY FAILED");
+    }
+
+    /**
+     * rtfn
+     *
+     * @param string $tableName
+     * @param array $installData
+     * @return string
+     * @throws \Sugarcrm\Tidbit\Exception
+     */
+    protected function prepareQuery($tableName, array $installData)
+    {
+        if (!$tableName || !$installData) {
+            throw new Exception("Mysql adapter error: wrong data to insert");
+        }
+
+        $sql = 'INSERT INTO ' . $tableName . ' ( ' . implode(', ', array_keys($installData[0])) . ') VALUES ';
+
+        foreach ($installData as $data) {
+            $sql .= '(' . implode(', ', $data) . "),";
+        }
+
+        return substr($sql, 0, -1) . ';';
+    }
+}

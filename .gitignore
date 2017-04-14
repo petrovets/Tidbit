@@ -1,0 +1,9 @@
+*.iml
+*.log
+.DS_Store
+.idea/
+composer.lock
+composer.phar
+vendor/
+build/
+csv/*

@@ -35,13 +35,7 @@
  * "Powered by SugarCRM".
  ********************************************************************************/
 
-require_once dirname(__FILE__) . '/bootstrap.php';
-
-require_once 'Tidbit/Generator/KBDocument.php';
-
-$gen = new Tidbit_Generator_KBDocument(
-    new KBDocument(),
-    new KBDocumentRevision(),
-    new KBContent()
-);
-$gen->generate(100);
+// "primary_account" was introduced only in 7.0.0 version of Sugar
+if (version_compare($GLOBALS['sugar_config']['sugar_version'], '7.0.0', '>=')) {
+    $GLOBALS['dataTool']['accounts_contacts']['primary_account'] = array('value' => 1);
+}

@@ -35,13 +35,26 @@
  * "Powered by SugarCRM".
  ********************************************************************************/
 
-require_once dirname(__FILE__) . '/bootstrap.php';
+namespace Sugarcrm\Tidbit\Random;
 
-require_once 'Tidbit/Generator/KBDocument.php';
+class FirstName
+{
+    private $list = array();
+    private $used = array();
 
-$gen = new Tidbit_Generator_KBDocument(
-    new KBDocument(),
-    new KBDocumentRevision(),
-    new KBContent()
-);
-$gen->generate(100);
+    public function __construct(array $list)
+    {
+        $this->list = $list;
+    }
+
+    public function __toString()
+    {
+        if (count($this->list) == 0) {
+            $this->list = $this->used;
+            $this->used = array();
+        }
+
+        shuffle($this->list);
+        return $this->used[] = array_shift($this->list);
+    }
+}
