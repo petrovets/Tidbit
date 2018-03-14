@@ -47,6 +47,8 @@ $GLOBALS['dataTool']['Meetings']['type'] = array('value' => "'Sugar'");
 
 // Durations in Minutes will be 30 mins, hours from 0 to 12 (selected randomly)
 $GLOBALS['dataTool']['Meetings']['duration_minutes'] = array('value' => "'30'");
+$GLOBALS['dataTool']['Meetings']['repeat_source'] = array('value' => "'Sugar'");
+$GLOBALS['dataTool']['Meetings']['repeat_dow'] = array('value' => "'1'");
 $GLOBALS['dataTool']['Meetings']['duration_hours'] = array('range' => array('min' => 0, 'max' => 12));
 /* We want meetings to be in the past 90% of the time. */
 /* Start should be always bigger than end */
