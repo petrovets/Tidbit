@@ -1,33 +1,34 @@
+#!/usr/local/bin/php
 <?php
 
 /*********************************************************************************
- * Tidbit is a data generation tool for the SugarCRM application developed by
- * SugarCRM, Inc. Copyright (C) 2004-2016 SugarCRM Inc.
- *
+ * Tidbit is a data generation tool for the SugarCRM application.  
+ * SugarCRM, Inc. Copyright (C) 2004-2010 SugarCRM Inc.
+ * 
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Affero General Public License version 3 as published by the
  * Free Software Foundation with the addition of the following permission added
  * to Section 15 as permitted in Section 7(a): FOR ANY PART OF THE COVERED WORK
  * IN WHICH THE COPYRIGHT IS OWNED BY SUGARCRM, SUGARCRM DISCLAIMS THE WARRANTY
  * OF NON INFRINGEMENT OF THIRD PARTY RIGHTS.
- *
+ * 
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
  * FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more
  * details.
- *
+ * 
  * You should have received a copy of the GNU Affero General Public License along with
  * this program; if not, see http://www.gnu.org/licenses or write to the Free
  * Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301 USA.
- *
+ * 
  * You can contact SugarCRM, Inc. headquarters at 10050 North Wolfe Road,
  * SW2-130, Cupertino, CA 95014, USA. or at email address contact@sugarcrm.com.
- *
+ * 
  * The interactive user interfaces in modified source and object code versions
  * of this program must display Appropriate Legal Notices, as required under
  * Section 5 of the GNU Affero General Public License version 3.
- *
+ * 
  * In accordance with Section 7(b) of the GNU Affero General Public License version 3,
  * these Appropriate Legal Notices must retain the display of the "Powered by
  * SugarCRM" logo. If the display of the logo is not reasonably feasible for
@@ -35,435 +36,564 @@
  * "Powered by SugarCRM".
  ********************************************************************************/
 
-require_once 'bootstrap.php';
+ini_set('memory_limit', '8096M');
+if(!defined('sugarEntry'))define('sugarEntry', true);
 
-/*
- * impose a hard limit of one hundred billion on all modules to ensure unique IDs
- */
-foreach ($modules as $module => $count) {
-    if ($count > 100000000000) {
-        $modules[$module] = 100000000000;
-    }
+chdir('..');
+require_once('include/entryPoint.php');
+set_time_limit(0);
+
+/* Are we going to use this? */
+$recordsPerPage = 100;
+$relQueryCount = 0;
+
+require_once('install_config.php');
+
+// TODO: This loads additional definitions into beanList and beanFiles for
+// custom modules
+if(file_exists('custom/application/Ext/Include/modules.ext.php')) {
+	require_once('custom/application/Ext/Include/modules.ext.php');
+}
+if (file_exists('include/modules_override.php')) {
+	require_once('include/modules_override.php');
 }
 
-//When creating module_keys variable, ensure that Teams and Users are first in the modules list
+if(!isset($argc))
+{
+	header("Location: install.php");
+}
+
+$usageStr = "Usage: ".$_SERVER['PHP_SELF']." [-l loadFactor] [-u userCount] [-x txBatchSize] [-e] [-c] [-t] [-h] [-v]\n";
+$versionStr = "Tidbit v2.0 -- Compatible with SugarCRM 5.5 through 6.0.\n";
+$helpStr = <<<EOS
+$versionStr
+This script populates your instance of SugarCRM with realistic demo data. 
+
+$usageStr
+Options
+    -l loadFactor   	The number of Accounts to create.  The ratio between
+                    	Accounts and the other modules is fixed in
+                    	install_config.php, so the loadFactor determines the number
+                    	of each type of module to create.
+                    	If not specified, defaults to 1000.
+
+    -u userCount    	The number of Users to create.  If not specified,
+                    	but loadFactor is, number of users is 1/10th of
+                    	loadFactor.  Otherwise, default is 100.
+
+    -o              	Turn Obliterate Mode on.  All existing records and
+                    	relationships in the tables populated by this script will
+                    	be emptied.  This includes any custom data in those tables.
+                    	The administrator account will not be deleted.
+
+    -c              	Turn Clean Mode on.  All existing demo data will be
+                    	removed.  No Data created within the app will be affected,
+                    	and the administrator account will not be deleted.  Has no
+                    	effect if Obliterate Mode is enabled.
+                    
+    -t              	Turn Turbo Mode on.  Records are produced in groups of 1000
+                    	duplicates.  Users and teams are not affected.
+                    	Useful for testing duplicate checking or quickly producing
+                    	a large volume of test data.
+
+    -e              	Turn Existing Users Mode on.  Regardless of other settings,
+                    	no Users or Teams will be created or modified.  Any new
+                    	data created will be assigned and associated with existing
+                    	Users and Teams.  The number of users that would normally
+                    	be created is assumed to be the number of existing users.
+                    	Useful for appending data onto an existing data set.
+                    
+    -d              	Turn Debug Mode on.  With Debug Mode, all queries will be
+                    	logged in a file called 'executedQueries.txt' in your
+                    	Tidbit folder.
+
+    -v              	Display version information.
+    
+    -h              	Display this help text.
+
+    -x count            How often to commit module records - important on DBs like DB2. Default is no batches.
+
+    -s             	Specify the number of teams per team set and per record.
+    
+    --allmodules	Automatically detect all installed modules and generate data for them.
+    
+    --allrelationships	Automatically detect all relationships and generate data for them.
+    
+    "Powered by SugarCRM"
+    
+
+EOS;
+
+
+// TODO: changed command line arg handling to detect --allmodules & --allrelationships
+if(function_exists('getopt'))
+{
+	$opts = getopt('l:u:s:x:ecothvd', array('allmodules', 'allrelationships'));
+	if($opts === false)
+	{
+		die($usageStr);
+	}
+	if(isset($opts['v']))
+	{
+		die($versionStr);
+	}
+	if(isset($opts['h']))
+	{
+		die($helpStr);
+	}
+}
+else
+{
+	$opts = array();
+	$nextData = false;
+	foreach($argv as $arg)
+	{
+		if(($arg === '-v'))
+		{
+			die($versionStr);
+		}
+		if($arg === '-h')
+		{
+			die($helpStr);
+		}
+		if($nextData !== false)
+		{
+			$opts[$nextData] = $arg;
+			$nextData = false;
+		}
+		elseif($arg === '-l')
+		{
+			$nextData = 'l';
+		}
+		elseif($arg === '-u')
+		{
+			$nextData = 'u';
+		}
+		elseif($arg === '-e')
+		{
+			$opts['e'] = true;
+		}
+		elseif($arg === '-o')
+		{
+			$opts['o'] = true;
+		}
+		elseif($arg === '-c')
+		{
+			$opts['c'] = true;
+		}
+		elseif($arg === '-x')
+		{
+			$nextData = 'x';
+		}
+		elseif($arg === '-t')
+		{
+			$opts['t'] = true;
+		}
+		elseif($arg === '-d')
+		{
+			$opts['d'] = true;
+		}
+		elseif($arg === '-s')
+		{
+			$nextData = 's';
+		}
+		elseif($arg == '--allmodules') {
+			$opts['allmodules'] = true;
+		}
+		elseif($arg == '--allrelationships') {
+			$opts['allrelationships'] = true;
+		}
+	}
+}
+
+//var_dump($opts);
+$allrelationships = false;
+if(isset($opts['allmodules'])) {
+	echo "automatically detecting installed modules\n"; 
+	foreach($GLOBALS['moduleList'] as $candidate_module) {
+		if(!isset($modules[$candidate_module])) {
+			// TODO: Load for modules not defined in install_config
+			// is the same as for Contacts (4000)
+			$modules[$candidate_module] = 4000;
+		} 
+	}
+}
+if (isset($opts['allrelationships'])) {
+	echo "automatically generating relationships\n"; 
+	$allrelationships = true;
+}
+if(isset($opts['l']))
+{
+	if(!is_numeric($opts['l']))
+	{
+		die($usageStr);
+	}
+	$factor = $opts['l']/$modules['Accounts'];
+	foreach($modules as $m=>$n){
+		$modules[$m] *= $factor;
+	}
+}
+if(isset($opts['u']))
+{
+	if(!is_numeric($opts['u']))
+	{
+		die($usageStr);
+	}
+	$modules['Teams'] = $opts['u']*($modules['Teams']/$modules['Users']);
+	$modules['Users'] = $opts['u'];
+}
+
+if(isset($opts['x']))
+{
+	if(!is_numeric($opts['x']) || $opts['x'] < 1)
+	{
+		die($usageStr);
+	}
+    $_SESSION['txBatchSize'] = $opts['x'];
+
+}
+
+if (file_exists(dirname(__FILE__) . '/../ini_setup.php')) {
+	require_once dirname(__FILE__) . '/../ini_setup.php';
+	set_include_path(
+	INSTANCE_PATH . PATH_SEPARATOR .
+	TEMPLATE_PATH . PATH_SEPARATOR .
+	get_include_path()
+	);
+}
+require_once('include/utils.php');
+require_once('config.php');
+require_once('include/modules.php');
+require_once('include/database/DBManagerFactory.php');
+require_once('include/SugarTheme/SugarTheme.php');
+require_once('Tidbit/Data/DefaultData.php');
+require_once('Tidbit/DataTool.php');
+require_once('Tidbit/install_functions.php');
+require_once('Tidbit/Data/contactSeedData.php');
+$_SESSION['modules'] = $modules;
+$_SESSION['startTime'] = microtime();
+$_SESSION['baseTime'] = time();
+$_SESSION['totalRecords'] = 0;
+
+
+
+foreach($modules as $records){
+	$_SESSION['totalRecords'] += $records;
+}
+if(isset($opts['e']))
+{
+	$_SESSION['UseExistUsers'] = true;
+}
+if(isset($opts['c']))
+{
+	$_SESSION['clean'] = true;
+}
+if(isset($opts['o']))
+{
+	$_SESSION['obliterate'] = true;
+}
+if(isset($opts['t']))
+{
+	$_SESSION['turbo'] = true;
+}
+if(isset($opts['d']))
+{
+	$_SESSION['debug'] = true;
+}
+$_SESSION['processedRecords'] = 0;
+$_SESSION['allProcessedRecords'] = 0;
+
+if(isset($_SESSION['debug']))
+{
+	$GLOBALS['queryFP'] = fopen('Tidbit/executedQueries.txt', 'w');
+}
+
+
+
+class FakeLogger { public function __call($m, $a) { } }
+$GLOBALS['log']= new FakeLogger();
+$GLOBALS['app_list_strings'] = return_app_list_strings_language('en_us');
+$GLOBALS['db'] = DBManagerFactory::getInstance(); // get default sugar db
+startTransaction();
+
+//When creating module_keys variable, ensure that Teams is the first element in the Array
+$teams = $modules['Teams'];
+unset($modules['Teams']);
+
 $module_keys = array_keys($modules);
-array_unshift($module_keys, 'Users');
 array_unshift($module_keys, 'Teams');
-$module_keys = array_unique($module_keys);
+$modules['Teams'] = $teams;
 
 echo "Constructing\n";
-foreach ($module_keys as $module) {
-    echo "{$modules[$module]} {$module}\n";
+foreach($module_keys as $module)
+{
+	echo "{$modules[$module]} {$module}\n";
 }
-
-if (isset($opts['with-favorites'])) {
-    echo "\nSugar Favorites Generated:\n";
-    foreach ($sugarFavoritesModules as $favModule => $favCount) {
-        echo "\t$favCount {$favModule}\n";
-    }
-}
-
-echo "\n";
-echo "With Clean Mode " . (isset($GLOBALS['clean']) ? "ON" : "OFF") . "\n";
-echo "With Turbo Mode " . (isset($GLOBALS['turbo']) ? "ON" : "OFF") . "\n";
-echo "With Transaction Batch Mode " . (isset($_GLOBALS['txBatchSize']) ? $_GLOBALS['txBatchSize'] : "OFF") . "\n";
-echo "With Obliterate Mode " . (isset($GLOBALS['obliterate']) ? "ON" : "OFF") . "\n";
-echo "With Existing Users Mode " . (isset($GLOBALS['UseExistUsers']) ? "ON - {$modules['Users']} users" : "OFF") . "\n";
-echo "With ActivityStream Populating Mode " . (isset($GLOBALS['as_populate']) ? "ON" : "OFF") . "\n";
-echo "With " . $maxTeamsPerSet ." teams in Team Sets \n";
-echo "With Team-based ACL Mode " . (isset($GLOBALS['tba']) ? "ON" : "OFF") . "\n";
-echo "With Team-based Restriction Level " .
-    (isset($GLOBALS['tba_level']) ? strtoupper($GLOBALS['tba_level']) : "OFF") . "\n";
-echo "\n";
-
-// creating storage adapter
-//if no storage flags are passed, try to autodetect storage from the sugar install
-if (empty($opts['storage'])) {
-    $sugarStorageType = $sugar_config['dbconfig']['db_type'];
-    switch ($sugarStorageType) {
-        case 'oci8':
-            $storageType = 'oracle';
-            break;
-        case 'db2':
-            $storageType = 'db2';
-            break;
-        default:
-            $storageType = 'mysql';
-    }
-} else {
-    $storageType = $opts['storage'];
-}
-
-if ($storageType == 'csv') {
-    $storage = TIDBIT_DIR . '/' . $tidbitCsvDir;
-    clearCsvDir($storage);
-} else {
-    $storage = $GLOBALS['db'];
-}
-
+echo "With Clean Mode ".(isset($_SESSION['clean'])?"ON":"OFF")."\n";
+echo "With Turbo Mode ".(isset($_SESSION['turbo'])?"ON":"OFF")."\n";
+echo "With Transaction Batch Mode ".(isset($_SESSION['txBatchSize'])?$_SESSION['txBatchSize']:"OFF"). "\n";
+echo "With Obliterate Mode ".(isset($_SESSION['obliterate'])?"ON":"OFF")."\n";
+echo "With Existing Users Mode ".(isset($_SESSION['UseExistUsers'])?"ON - {$modules['Users']} users":"OFF")."\n";
 $obliterated = array();
-$relationStorageBuffers = array();
+//DataTool::generateTeamSets();
+foreach($module_keys as $module)
+{
+	if(!is_dir('modules/' . $module))continue;
+	if((($module == 'Users') || ($module == 'Teams')) && isset($_SESSION['UseExistUsers']))
+	{
+		echo "Skipping $module\n";
+		continue;
+	}
+	
+	// TODO: fixing emails
+//	if ($module == 'Emails') {
+//		echo "Skipping $module\n";
+//		continue;
+//	}
 
-$storageAdapter = \Sugarcrm\Tidbit\StorageAdapter\Factory::getAdapterInstance($storageType, $storage, $logQueriesPath);
-$prefsGenerator = new \Sugarcrm\Tidbit\Generator\UserPreferences($GLOBALS['db'], $storageAdapter);
-$activityGenerator = new \Sugarcrm\Tidbit\Generator\Activity(
-    $GLOBALS['db'],
-    $storageAdapter,
-    $activityStreamOptions['insertion_buffer_size'],
-    $activityStreamOptions['activities_per_module_record'],
-    $activityStreamOptions['last_n_records']
-);
-$activityGenerator->setActivityModulesBlackList($activityModulesBlackList);
-if (isset($GLOBALS['obliterate'])) {
-    echo "Obliterating activities ... \n";
-    $activityGenerator->obliterateActivities();
-}
+	echo "Processing Module $module\n";
+	$total = $modules[$module];
 
-foreach ($module_keys as $module) {
-    $GLOBALS['time_spend'][$module] = microtime();
+	$GLOBALS['relatedQueries'] = array();
+	$GLOBALS['queries'] = array();
+	$GLOBALS['relatedQueriesCount'] = 0;
 
-    // Check module class exists in bean factory
-    // For old versions - getBeanName is used
-    // For new versions - getBeanClass, cause getBeanName is deprecated
-    if ((method_exists('BeanFactory', 'getBeanClass') && !BeanFactory::getBeanClass($module))
-        || method_exists('BeanFactory', 'getBeanName') && !BeanFactory::getBeanName($module)) {
-        echo "Module $module is not found in 'modules/' folder or \$beanList, \$beanFiles global" .
-            " variables do not contain it\n";
-        echo "Skipping module: " . $module . "\n";
-        continue;
-    }
+	// TODO: ignoring modules who aren't keys in $beanList
+	// and  classes who aren't keys in $beanFiles
+	// Not sure if this is the right thing to do
+	if (!isset($beanList[$module])) {
+		echo "skipping module: " . $module . "\n";
+		continue;
+	}
+	$class = $beanList[$module];
+	if (!isset($beanFiles[$class])) {
+		echo "skipping module: " . $module . "\n";
+		continue;
+	}
+	require_once($beanFiles[$class]);
+	$bean = new $class();
+	
+	// TODO: if allrelationships is true, pull from relationships
+	// table and add to $GLOBALS['tidbit_relationships']
+	if ($allrelationships && $module != 'Teams' && $module != 'Emails') { // Teams & Emails module relationships handled separately
+		$result = $GLOBALS['db']->query(
+		"SELECT * FROM relationships WHERE lhs_module='$module'");
+		global $tidbit_relationships;
+		while ($row = $GLOBALS['db']->fetchByAssoc($result)) {
+			if (!isset($row['join_table']) || !isset($row['join_key_lhs']) 
+				|| !isset($row['join_key_rhs'])) {
+					continue;
+			}
+			$rhs_module = $row['rhs_module'];
+			$table = $row['join_table'];
+			$self = $row['join_key_lhs'];
+			$you = $row['join_key_rhs'];
+			if ($rhs_module == 'Teams' || $rhs_module == 'Emails') { // Teams & Emails module relationships handled separately
+				continue;
+			}
+			if (!isset($tidbit_relationships[$module])) {
+				$tidbit_relationships[$module] = array();
+			}
+			if (!isset($tidbit_relationships[$module][$rhs_module])) {
+				$tidbit_relationships[$module][$rhs_module] = array();
+			}
+			$tidbit_relationships[$module][$rhs_module]['table'] = $table;
+			$tidbit_relationships[$module][$rhs_module]['self'] = $self;
+			$tidbit_relationships[$module][$rhs_module]['you'] = $you;
+		}
+	}
 
-    if ((($module == 'Users') || ($module == 'Teams')) && isset($GLOBALS['UseExistUsers'])) {
-        if ($module == 'Teams') {
-            \Sugarcrm\Tidbit\Generator\TeamSets::loadExistingTeamSetsIntoDataTool($GLOBALS['db']);
-        }
-        if ($module == 'Users') {
-            $existingUserIds = loadUserIds($GLOBALS['db']);
-            $activityGenerator->setUserIds($existingUserIds);
-        }
-        echo "Skipping $module\n";
-        continue;
-    }
+	if(isset($_SESSION['obliterate'])){
+		echo "\tObliterating all existing data ... ";
+		/* Make sure not to delete the admin! */
+		if($module == 'Users') {
+			$GLOBALS['db']->query("DELETE FROM $bean->table_name WHERE id != '1'");
+			$GLOBALS['db']->query("DELETE FROM user_preferences WHERE 1=1");
+		} else if($module == 'Teams') {
+			$GLOBALS['db']->query("DELETE FROM teams WHERE id != '1'");
+			$GLOBALS['db']->query("DELETE FROM team_sets");
+			$GLOBALS['db']->query("DELETE FROM team_sets_teams");
+			$GLOBALS['db']->query("DELETE FROM team_sets_modules");
+		} else {
+			$GLOBALS['db']->query("DELETE FROM $bean->table_name WHERE 1 = 1");
+		}
+		if(!empty($tidbit_relationships[$module])){
+			foreach($tidbit_relationships[$module] as $rel){
+				if(!empty($obliterated[$rel['table']]))continue;
+				$obliterated[$rel['table']]= true;
+				$GLOBALS['db']->query("DELETE FROM {$rel['table']} WHERE 1 = 1");
+			}
+		}
+		echo "DONE\n";
+	}elseif(isset($_SESSION['clean'])){
+		echo "\tCleaning up demo data ... ";
+		/* Make sure not to delete the admin! */
+		if($module == 'Users'){
+			$GLOBALS['db']->query("DELETE FROM $bean->table_name WHERE id != '1' AND id LIKE 'seed-%'");
+		}else if ($module == 'Teams') {
+			$GLOBALS['db']->query("DELETE FROM teams WHERE id != '1' AND id LIKE 'seed-%'");
+			$GLOBALS['db']->query("DELETE FROM team_sets");
+			$GLOBALS['db']->query("DELETE FROM team_sets_teams");
+			$GLOBALS['db']->query("DELETE FROM team_sets_modules");
+		}else {
+			$GLOBALS['db']->query("DELETE FROM $bean->table_name WHERE 1=1 AND id LIKE 'seed-%'");
+		}
+		if(!empty($tidbit_relationships[$module])){
+			foreach($tidbit_relationships[$module] as $rel){
+				if(!empty($obliterated[$rel['table']]))continue;
+				$obliterated[$rel['table']]= true;
+				$GLOBALS['db']->query("DELETE FROM {$rel['table']} WHERE 1=1 AND id LIKE 'seed-%'");
+			}
+		}
+		echo "DONE\n";
+	}
 
-    echo "\nProcessing Module $module"
-        .(isset($tidbit_relationships[$module])
-            ? " with relationships to ".implode(", ", array_keys($tidbit_relationships[$module]))
-            :"")
-        .":\n";
-    $total = $modules[$module];
+	if(file_exists('Tidbit/Data/' . $bean->module_dir . '.php')){
+		require_once('Tidbit/Data/' . $bean->module_dir . '.php');
+	}
+	$ibfd = new DataTool();
+	$ibfd->fields = $bean->field_defs;
+	
+	$ibfd->table_name = $bean->table_name;
+	$ibfd->module = $module;
 
-    if (in_array($module, $moduleUsingGenerators)) {
-        $generatorName = '\Sugarcrm\Tidbit\Generator\\' . $module;
-        /** @var \Sugarcrm\Tidbit\Generator\Common $generator */
-        $generator = new $generatorName($GLOBALS['db'], $storageAdapter, $insertBatchSize, $modules[$module]);
+	unset($GLOBALS['queryHead']);
+	unset($GLOBALS['queries']);
+	/* We need to insert $total records
+	 * into the DB.  We are using the module and table-name given by
+	 * $module and $bean->table_name. */
 
-        if (isset($GLOBALS['obliterate'])) {
-            echo "\tObliterating all existing data ... ";
-            $generator->obliterateDB();
-            echo "DONE";
-        } elseif (isset($GLOBALS['clean'])) {
-            echo "\tCleaning up Tidbit and demo data ... ";
-            $generator->clearDB();
-            echo "DONE";
-        }
 
-        if (!empty($GLOBALS['as_populate'])) {
-            $generator->setActivityStreamGenerator($activityGenerator);
-            $activityBean = $generator->getActivityBean();
-            if ($activityBean && $activityGenerator->willGenerateActivity($activityBean)) {
-                echo "\n\tWill create " . $activityGenerator->calculateActivitiesToCreate($modules[$module])
-                    . " activity records";
-            }
-        }
+	for($i = 0; $i < $total; $i++){
+		$ibfd->count = $i;
+		/* Don't turbo Users or Teams */
+		if(!isset($_SESSION['turbo']) || !($i % $recordsPerPage) || ($module != 'Users') || ($module != 'Teams')){
+			$ibfd->clean();
+			$ibfd->count = $i;
+			$ibfd->generateData();
+		}
+		/*
+		 if ($i == 0) {
+		 foreach($ibfd->installData as $key => $val) {
+		 echo $key . " => " . $val . "\n";
+		 }
+		 }
+		 */
+		$ibfd->generateId();
+		//$ibfd->generateTeamSetId();
+		$ibfd->createInserts();
+		$ibfd->generateRelationships();
 
-        echo "\n\tHitting DB... ";
-        $generator->generate();
-        $total = $generator->getInsertCounter();
-        echo " DONE";
+		$_SESSION['processedRecords']++;
 
-        $GLOBALS['time_spend'][$module] = microtime_diff($GLOBALS['time_spend'][$module], microtime());
-        echo "\n\tTime spend... " . $GLOBALS['time_spend'][$module] . "s\n";
+		//flush the relatedQueries every 2000, and at the end of each page.
+		if(($relQueryCount >= 2000) || ($i == $total-1))
+		{
+			echo '.';
+			foreach($GLOBALS['relatedQueries'] as $data){
+				$head = $data['head'];
+				unset($data['head']);
+				processQueries($head, $data);
+			}
+			$GLOBALS['relatedQueries'] = array();
+			$relQueryCount = 0;
+		}
 
-        continue;
-    }
+		if(!empty($GLOBALS['queryHead']) && !empty($GLOBALS['queries']) && $i != 0 && $i%19 ==0)
+		{
+			$dbStart = microtime();
+			processQueries($GLOBALS['queryHead'], $GLOBALS['queries']);
+			/* Clear queries */
+			unset($GLOBALS['queries']);
+		}
 
-    echo "Inserting ${total} records.\n";
-    $total_iterator = 0;
-    if (isset($GLOBALS['iterator']) && ($total > $GLOBALS['iterator'])) {
-        $total_iterator = $total - $GLOBALS['iterator'];
-        echo $total_iterator . " records will be skipped from generation.\n";
-    }
-
-    $bean = BeanFactory::getBean($module);
-
-    // If the module has custom fields, write to the _cstm table
-    $useCustomTable = $bean->hasCustomFields();
-
-    if (isset($GLOBALS['obliterate'])) {
-        echo "\tObliterating all existing data ... ";
-        /* Make sure not to delete the admin! */
-        if ($module == 'Users') {
-            $GLOBALS['db']->query("DELETE FROM $bean->table_name WHERE id != '1'");
-            $prefsGenerator->obliterate();
-        } elseif ($module == 'Teams') {
-            $GLOBALS['db']->query("DELETE FROM teams WHERE id != '1'");
-            $GLOBALS['db']->query("DELETE FROM team_sets");
-            $GLOBALS['db']->query("DELETE FROM team_sets_teams");
-            $GLOBALS['db']->query("DELETE FROM team_sets_modules");
-        } else {
-            $GLOBALS['db']->query("DELETE FROM $bean->table_name WHERE 1 = 1");
-
-            // if module has custom table obliterate up custom table too
-            if ($useCustomTable) {
-                $GLOBALS['db']->query("DELETE FROM " . $bean->get_custom_table_name() . " WHERE 1 = 1");
-            }
-        }
-        if (!empty($tidbit_relationships[$module])) {
-            foreach ($tidbit_relationships[$module] as $rel) {
-                if (!empty($obliterated[$rel['table']])) {
-                    continue;
-                }
-                $obliterated[$rel['table']] = true;
-                $GLOBALS['db']->query("DELETE FROM {$rel['table']} WHERE 1 = 1");
-            }
-        }
-        echo "DONE";
-    } elseif (isset($GLOBALS['clean'])) {
-        echo "\tCleaning up demo data ... ";
-        /* Make sure not to delete the admin! */
-        if ($module == 'Users') {
-            $prefsGenerator->clean();
-            $GLOBALS['db']->query("DELETE FROM $bean->table_name WHERE id != '1' AND id LIKE 'seed-%'");
-        } elseif ($module == 'Teams') {
-            //TBD: Following 3 queries only tested with Mysql database,
-            //  if you are using database such as Oracle, DB2, MSSQL, you might need to refactor those 3 queries.
-            $GLOBALS['db']->query(
-                "DELETE a FROM team_sets_teams a JOIN teams b ON b.id=a.team_id "
-                ."WHERE b.id != '1' AND b.id LIKE 'seed-%'"
-            );
-            $GLOBALS['db']->query(
-                "DELETE a FROM team_sets a LEFT JOIN (SELECT DISTINCT team_set_id FROM team_sets_teams"
-                . " WHERE deleted=0) b ON a.id=b.team_set_id WHERE b.team_set_id is null"
-            );
-            $GLOBALS['db']->query(
-                "DELETE a FROM team_sets_modules a left JOIN team_sets b ON a.team_set_id=b.id"
-                . " WHERE b.id is null AND a.team_set_id is not null"
-            );
-            $GLOBALS['db']->query("DELETE FROM teams WHERE id != '1' AND id LIKE 'seed-%'");
-        } else {
-            $GLOBALS['db']->query("DELETE FROM $bean->table_name WHERE 1=1 AND id LIKE 'seed-%'");
-
-            // if module has custom table clean up custom table too
-            if ($useCustomTable) {
-                $GLOBALS['db']->query(
-                    "DELETE FROM " . $bean->get_custom_table_name()
-                    . " WHERE 1=1 AND id_c LIKE 'seed-%'"
-                );
-            }
-        }
-        if (!empty($tidbit_relationships[$module])) {
-            foreach ($tidbit_relationships[$module] as $rel) {
-                if (!empty($obliterated[$rel['table']])) {
-                    continue;
-                }
-                $obliterated[$rel['table']] = true;
-                $GLOBALS['db']->query("DELETE FROM {$rel['table']} WHERE 1=1 AND id LIKE 'seed-%'");
-            }
-        }
-        echo "DONE";
-    }
-
-    $dTool = new \Sugarcrm\Tidbit\DataTool($storageType);
-
-    $dTool->table_name = $bean->getTableName();
-    $dTool->module = $module;
-    $dTool->setFields($bean->field_defs);
-
-    if (!empty($GLOBALS['as_populate']) && $activityGenerator->willGenerateActivity($bean)) {
-        echo "\n\tWill create " . $activityGenerator->calculateActivitiesToCreate($total) . " activity records";
-    }
-    echo "\n\tHitting DB... ";
-
-    $beanInsertBuffer = new \Sugarcrm\Tidbit\InsertBuffer($dTool->table_name, $storageAdapter, $insertBatchSize);
-    
-    if ($useCustomTable) {
-        $beanInsertBufferCustom = new \Sugarcrm\Tidbit\InsertBuffer(
-            $bean->get_custom_table_name(),
-            $storageAdapter,
-            $insertBatchSize
-        );
-    }
-    
-    /* We need to insert $total records
-     * into the DB.  We are using the module and table-name given by
-     * $module and $bean->table_name. */
-    $generatedIds = array();
-    for ($i = 0; $i < $total; $i++) {
-        if (isset($GLOBALS['iterator']) && ($i <= $total_iterator)) {
-            continue;
-        }
-        $dTool->count = $i;
-        /* Don't turbo Users or Teams */
-        if (!isset($GLOBALS['turbo']) || !($i % $recordsPerPage) || ($module != 'Users') || ($module != 'Teams')) {
-            $dTool->clean();
-            $dTool->count = $i;
-            $dTool->generateData();
-        }
-
-        // Generate relationships if $bean has an "id" field
-        if ($beanId = $dTool->generateId($useCustomTable)) {
-            $generatedIds[] = $beanId;
-
-            /** @var \Sugarcrm\Tidbit\Core\Relationships $relationships */
-            $relationships = \Sugarcrm\Tidbit\Core\Factory::getComponent('Relationships');
-            $relationships->generateRelationships($dTool->module, $dTool->count, $dTool->installData);
-
-            if ($relationships->getRelatedModules()) {
-                foreach ($relationships->getRelatedModules() as $table => $installDataArray) {
-                    if (empty($relationStorageBuffers[$table])) {
-                        $relationStorageBuffers[$table] = new \Sugarcrm\Tidbit\InsertBuffer(
-                            $table,
-                            $storageAdapter,
-                            $insertBatchSize
-                        );
-                    }
-
-                    foreach ($installDataArray as $data) {
-                        $relationStorageBuffers[$table]->addInstallData($data);
-                    }
-                }
-            }
-
-            $relationships->clearRelatedModules();
-        }
-
-        $beanInsertBuffer->addInstallData($dTool->installData);
-
-        // if module has custom table, write custom install data into buffer
-        if (isset($beanInsertBufferCustom) && $useCustomTable && !empty($dTool->installDataCstm)) {
-            $beanInsertBufferCustom->addInstallData($dTool->installDataCstm);
-        }
-
-        // Increase counters and insert generated data to Buffer
-        $GLOBALS['allProcessedRecords']++;
-        $GLOBALS['processedRecords']++;
-
-        if (!empty($GLOBALS['as_populate'])
-            && (
-                empty($activityStreamOptions['last_n_records'])
-                || $total < $activityStreamOptions['last_n_records']
-                || $i >= $total - $activityStreamOptions['last_n_records']
-            )
-        ) {
-            $activityGenerator->createActivityForRecord($dTool, $bean);
-        }
-
-        if ($_GLOBALS['txBatchSize'] && $i % $_GLOBALS['txBatchSize'] == 0) {
-            $storageAdapter->commitQuery();
+        if (isset($_SESSION['txBatchSize']) && $i%$_SESSION['txBatchSize'] == 0) {
+            $GLOBALS['db']->commit();
             echo "#";
         }
-        if ($i % 1000 == 0) {
-            echo '*';
-        }
-    } //for
 
-    if ($module == 'Teams') {
-        $teamGenerator = new \Sugarcrm\Tidbit\Generator\TeamSets(
-            $GLOBALS['db'],
-            $storageAdapter,
-            $insertBatchSize,
-            $generatedIds,
-            $maxTeamsPerSet
-        );
-        $teamGenerator->generate();
-    }
+		if($i%1000 == 0) echo '*';
 
-    // Apply TBA Rules for some modules
-    // $roleActions are defined in configs
-    if ($module == 'ACLRoles') {
-        $tbaGenerator = new \Sugarcrm\Tidbit\Generator\TBA($GLOBALS['db'], $storageAdapter, $insertBatchSize);
+	} //for
 
-        if (isset($GLOBALS['clean'])) {
-            $tbaGenerator->clearDB();
-        } elseif (isset($GLOBALS['obliterate'])) {
-            $tbaGenerator->obliterateDB();
-        }
+	if(!empty($GLOBALS['queryHead']) && !empty($GLOBALS['queries']))
+	{
+		$dbStart = microtime();
+		echo "\n\tHitting DB... ";
+		processQueries($GLOBALS['queryHead'], $GLOBALS['queries']);
+		/* Clear queries */
+		unset($GLOBALS['queryHead']);
+		unset($GLOBALS['queries']);
+		echo microtime_diff($dbStart, microtime())."s ";
+	}
 
-        if (!empty($GLOBALS['tba'])) {
-            $tbaGenerator->setAclRoleIds($generatedIds);
-            $tbaGenerator->setRoleActions($roleActions);
-            $tbaGenerator->setTbaFieldAccess($tbaFieldAccess);
-            $tbaGenerator->setTbaRestrictionLevel($tbaRestrictionLevel);
-            $tbaGenerator->generate();
-        }
-    }
+//	if ($module == 'Users') {
+//		loggedQuery(file_get_contents(dirname(__FILE__) . '/sql/update-user-preferences.sql'));
+//	}
 
     if ($module == 'Users') {
-        $prefsGenerator->generate($generatedIds);
-        if (!empty($GLOBALS['as_populate'])) {
-            $activityGenerator->setUserIds($generatedIds);
+        $content = 'YTo0OntzOjg6InRpbWV6b25lIjtzOjE1OiJBbWVyaWNhL1Bob2VuaXgiO3M6MjoidXQiO2k6MTtzOjI0OiJIb21lX1RFQU1OT1RJQ0VfT1JERVJfQlkiO3M6MTA6ImRhdGVfc3RhcnQiO3M6MTI6InVzZXJQcml2R3VpZCI7czozNjoiYTQ4MzYyMTEtZWU4OS0wNzE0LWE0YTItNDY2OTg3YzI4NGY0Ijt9';
+        $result = $GLOBALS['db']->query("SELECT id from users where id LIKE 'seed-Users%'");
+        while($row = $GLOBALS['db']->fetchByAssoc($result)){
+            $hashed_id = md5($row['id']);
+
+            $curdt = $datetime = date('Y-m-d H:i:s') ;
+            $stmt = "INSERT INTO user_preferences(id,category,date_entered,date_modified,assigned_user_id,contents) values ('" . $hashed_id . "', 'global', '" . $curdt . "', '" . $curdt . "', '" . $row['id'] . "', '" . $content . "')";
+            loggedQuery($stmt);
         }
     }
 
-    // Flushing insertBuffer
-    if (isset($beanInsertBuffer)) {
-        $beanInsertBuffer->flush();
-    }
-    if (isset($beanInsertBufferCustom)) {
-        $beanInsertBufferCustom->flush();
-    }
-    // Flushing insertBuffer from relationships
-    if (isset($relationStorageBuffers)) {
-        foreach ($relationStorageBuffers as $relationStorageBufferForFlush) {
-            $relationStorageBufferForFlush->flush();
-        }
-    }
+	if ($module == 'Teams') {
+		require_once('modules/Teams/TeamSet.php');
+        require_once('modules/Teams/TeamSetManager.php');
+		TeamSetManager::flushBackendCache();
+		$teams_data = array();
+		$result = $GLOBALS['db']->query("SELECT id FROM teams");
+		while($row = $GLOBALS['db']->fetchByAssoc($result)){
+			$teams_data[$row['id']] = $row['id'];
+		}
 
-    echo " DONE";
+		sort($teams_data);
+		//Now generate the random team_sets
+		$results = array();
 
-    $GLOBALS['time_spend'][$module] = microtime_diff($GLOBALS['time_spend'][$module], microtime());
-    echo "\n\tTime spend... " . $GLOBALS['time_spend'][$module] . "s\n";
+		$max_teams_per_set = 10;
+		if(isset($opts['s']) && $opts['s'] > 0){
+			$max_teams_per_set = $opts['s'];
+		}
+
+		foreach($teams_data as $team_id) {
+			//If there are more than 20 teams, a reasonable number of teams for a maximum team set is 10
+			if($max_teams_per_set == 1){
+				generate_team_set($team_id, array($team_id));
+			}elseif(count($teams_data) > $max_teams_per_set) {
+				generate_team_set($team_id, get_random_array($teams_data, $max_teams_per_set));
+			}else {
+				generate_team_set($team_id, $teams_data);
+			}
+		}
+
+		$result = $GLOBALS['db']->query("SELECT team_set_id, team_id FROM team_sets_teams");
+		$team_sets = array();
+		while($row = $GLOBALS['db']->fetchByAssoc($result)){
+			$team_sets[$row['team_set_id']][] = $row['team_id'];
+		}
+		DataTool::$team_sets_array = $team_sets;
+	}
+
+	echo "DONE\n";
+}
+endTransaction();
+
+if(!empty($GLOBALS['queryFP']))
+{
+	fclose($GLOBALS['queryFP']);
 }
 
-// Update enabled Modules Tabs
-\Sugarcrm\Tidbit\Helper\ModuleTabs::updateEnabledTabs($GLOBALS['db'], $module_keys, $GLOBALS['moduleList']);
 
-// force immediately destructors work
-unset($relationStorageBuffers);
-$totalInsertedActivities = $activityGenerator->getInsertedActivitiesCount();
-unset($activityGenerator);
-
-if (!empty($GLOBALS['queryFP'])) {
-    fclose($GLOBALS['queryFP']);
-}
-
-echo "\n";
-echo "Total Time: " . microtime_diff($GLOBALS['startTime'], microtime()) . "\n";
-echo "Core Records Inserted: " . $GLOBALS['processedRecords'] . "\n";
-echo "Total Records Inserted: " . $GLOBALS['allProcessedRecords'] . "\n";
-
-if (!empty($GLOBALS['as_populate'])) {
-    echo "Activities: \n";
-    echo " - user activities per module record: " . $activityStreamOptions['activities_per_module_record'] . "\n";
-    echo " - users: " . $modules['Users'] . "\n";
-    echo " - max number of records for each module: " .
-        ($activityStreamOptions['last_n_records'] ? $activityStreamOptions['last_n_records'] : 'all') . "\n";
-    echo " - total records inserted: " . $totalInsertedActivities . "\n";
-}
-
-if ($storageType == 'csv') {
-    // Save table-dictionaries
-    $converter = new \Sugarcrm\Tidbit\CsvConverter($GLOBALS['db'], $storageAdapter, $insertBatchSize);
-    $converter->convert('config');
-    $converter->convert('acl_actions');
-    if (isset($GLOBALS['UseExistUsers'])) {
-        $converter->convert('users');
-        $converter->convert('user_preferences');
-        $converter->convert('teams');
-        $converter->convert('team_sets');
-        $converter->convert('team_sets_teams');
-    }
-}
-
+echo "Total Time: " . microtime_diff($_SESSION['startTime'], microtime()) . "\n";
+echo "Core Records Inserted: ".$_SESSION['processedRecords']."\n";
+echo "Total Records Inserted: ".$_SESSION['allProcessedRecords']."\n";
 echo "Done\n\n\n";
+
+?>
