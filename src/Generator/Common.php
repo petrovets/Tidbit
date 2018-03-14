@@ -222,6 +222,16 @@ abstract class Common
     }
 
     /**
+     * Flush all insertBuffers
+     */
+    public function flushInsertBuffers()
+    {
+        foreach ($this->insertBuffers as $bufferForFlush) {
+            $bufferForFlush->flush();
+        }
+    }
+
+    /**
      * Update generated records count in $modules array
      *
      * @param $module
@@ -246,9 +256,9 @@ abstract class Common
         $bean = \BeanFactory::getBean($modelName);
 
         $dataTool = new DataTool($this->storageType);
-        $dataTool->fields = $bean->field_defs;
         $dataTool->table_name = $bean->table_name;
         $dataTool->module = $modelName;
+        $dataTool->setFields($bean->field_defs);
         $dataTool->count = $modelCounter;
         $dataTool->generateId();
         $dataTool->generateData();

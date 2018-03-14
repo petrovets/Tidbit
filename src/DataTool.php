@@ -58,17 +58,14 @@ class DataTool
     /** @var array stores data to insert into %module_cstm% table */
     public $installDataCstm = array();
 
-    public $fields = array();
+    /** @var array stores fields and its values from vardefs.php for every module */
+    protected $fields = array();
     public $table_name = '';
     public $module = '';
     public $count = 0;
 
     // TeamSet with all teams inside
     static public $team_sets_array = array();
-
-    // Cache for generateSeed function
-    static public $seedModules = array();
-    static public $seedFields = array();
 
     // based on xhprof, db_convert for datetime and time generation, consume a lot of time.
     // getConvertDatetime() function re-generate time only when this index reach max number
@@ -115,40 +112,57 @@ class DataTool
         $this->coreIntervals = CoreFactory::getComponent('Intervals');
     }
 
+    /**
+     * Getter for filtered fields data from vardef.php
+     *
+     * @return array
+     */
+    public function getFields()
+    {
+        return $this->fields;
+    }
+
+    /**
+     * It takes fields from vardef.php for a module, filters it and sets filtered array to $fields variable.
+     * It removes fields for which don't need to generate data.
+     * Filtering reduce time for iterating fields.
+     *
+     * $isNonDB - Don't iterate 'non-db' (and similar to it) fields
+     * $isSkipped - Skip fields which are marked for skipping in tidbit's config for module
+     * $isMysqlAutoincrement - There is no need to generate field data for autoincrement fields in MySQL
+     *
+     * @param $fds array - Value of 'fields' key from vardef.php for a module.
+     */
+    public function setFields($fds)
+    {
+        foreach ($fds as $fieldName => $fieldDefinition) {
+            $isNonDB = !empty($fieldDefinition['source']) && $fieldDefinition['source'] != 'custom_fields';
+            $isSkipped = !empty($GLOBALS['dataTool'][$this->module][$fieldName]['skip']);
+            $isMysqlAutoincrement = $this->storageType == 'mysql' &&
+                (   // autoincrement option is set in vardef.php
+                    !empty($fieldDefinition['auto_increment'])
+                    // autoincrement option is set in Tidbit's config
+                    || !empty($GLOBALS['dataTool'][$this->module][$fieldName]['autoincrement'])
+                );
+            if ($isNonDB || $isSkipped || $isMysqlAutoincrement) {
+                unset($fds[$fieldName]);
+            }
+        }
+        $this->fields = $fds;
+    }
 
 
     /**
      * Generate data and store it in the installData array.
-     * This function calls generateSeed and passes the return
-     * value as an argument to getData.  This is done for each
-     * field.
+     * This is done for each field.
      */
     public function generateData()
     {
-        /* For each of the fields in this record, we want to generate
-         * one element of seed data for it.*/
         foreach ($this->fields as $field => $data) {
-            if (!empty($data['source']) && $data['source'] != 'custom_fields') {
+            if (isset($this->installData[$field])) {
                 continue;
             }
-
-            $type = (!empty($data['dbType'])) ? $data['dbType'] : $data['type'];
-            $GLOBALS['fieldData'] = $data;
-
-            /* There are 3 unique parts to the seed: the Module name,
-             * the count of the record, and the name of the field.
-             * Using these 3 things should keep our seed unique enough.
-             */
-            $seed = $this->generateSeed($this->module, $field, $this->count);
-            $value = $this->getData($field, $type, $data['type'], $seed);
-            if (!empty($value) || $value == '0') {
-                if (empty($data['source'])) {
-                    $this->installData[$field] = $value;
-                } else {
-                    // "source" == "custom_fields" is an indicator for Custom field in VarDefs
-                    $this->installDataCstm[$field] = $value;
-                }
-            }
+            $this->generateFieldData($field);
         }
 
         /* These fields are filled in once per record. */
@@ -181,7 +195,38 @@ class DataTool
             }
         }
     }
-    
+
+    /**
+     * Generates data for provided field name based on field definition in vardef.php for proper module
+     *
+     * @param $field string - field name
+     */
+    protected function generateFieldData($field)
+    {
+        $type = (!empty($this->fields[$field]['dbType']))
+            ? $this->fields[$field]['dbType']
+            : $this->fields[$field]['type'];
+        $GLOBALS['fieldData'] = $this->fields[$field];
+
+        /* Check whether rules exists in config for the module. In other way look for data type in 'default' config . */
+        foreach ([$this->module, 'default'] as $rules) {
+            /* Look for settings for field.
+                In case it doesn't exist check it for 'dbType' for provided field and at last for 'type'. */
+            foreach ([$field, $type, $this->fields[$field]['type']] as $dataType) {
+                if (!empty($GLOBALS['dataTool'][$rules][$dataType])) {
+                    $value = $this->handleType($GLOBALS['dataTool'][$rules][$dataType], $type, $field);
+                    if (empty($this->fields[$field]['source'])) {
+                        $this->installData[$field] = $value;
+                    } else {
+                        // "source" == "custom_fields" is an indicator for Custom field in VarDefs
+                        $this->installDataCstm[$field] = $value;
+                    }
+                    break 2;
+                }
+            }
+        }
+    }
+
     /**
      * Generate a unique ID based on the module name, system time, and count (defined
      * in configs for each module), and save the ID in the installData array.
@@ -200,7 +245,7 @@ class DataTool
         if ($includeCustomId) {
             $this->installDataCstm['id_c'] = $this->installData['id'];
         }
-        
+
         return substr($this->installData['id'], 1, -1);
     }
 
@@ -213,77 +258,19 @@ class DataTool
 
 
     /**
-     * Dispatch to the handleType function based on what values are present in the
-     * global $dataTool array.  This array is populated by the .php files in the
-     * config/data directory.
-     *
-     * Priority: FieldName > FieldDBType > FieldSugarType
-     *
-     * @param $fieldName - name of the field for which data is being generated
-     * @param $fieldDBType - The DB type of the field, if it differs from the Sugar type
-     * @param $sugarType - Always the Sugar type of the field
-     * @param $seed - Seed from generateSeed(), used to generate a random reasonable value
-     *
-     * @return string
-     */
-    public function getData($fieldName, $fieldDBType, $sugarType, $seed)
-    {
-        $rules = $GLOBALS['dataTool'];
-
-        //echo "GD: $fieldName, $fieldType, $sugarType, $seed\n";
-        // Check if the fieldName is defined
-        if (!empty($rules[$this->module][$fieldName])) {
-            return $this->handleType($rules[$this->module][$fieldName], $fieldDBType, $fieldName, $seed);
-        }
-
-        // Check if fieldType is defined
-        if (!empty($rules[$this->module][$fieldDBType])) {
-            return $this->handleType($rules[$this->module][$fieldDBType], $fieldDBType, $fieldName, $seed);
-        }
-
-        // Check if the Sugar type is defined
-        if (!empty($rules[$this->module][$sugarType])) {
-            return $this->handleType($rules[$this->module][$sugarType], $fieldDBType, $fieldName, $seed);
-        }
-
-        // If the fieldName is undefined for this module, see if a default value is defined
-        if (!empty($rules['default'][$fieldName])) {
-            return $this->handleType($rules['default'][$fieldName], $fieldDBType, $fieldName, $seed);
-        }
-
-        // If the fieldType is undefined for this module, see if a default value is defined
-        if (!empty($rules['default'][$fieldDBType])) {
-            return $this->handleType($rules['default'][$fieldDBType], $fieldDBType, $fieldName, $seed);
-        }
-
-        // If the sugarType is undefined for this module, see if a default value is defined
-        if (!empty($rules['default'][$sugarType])) {
-            return $this->handleType($rules['default'][$sugarType], $fieldDBType, $fieldName, $seed);
-        }
-
-        return '';
-    }
-
-    /**
      * Returns a randomly generated piece of data for the current module and field.
      *
      * @param $typeData - An array from a .php file in the Tidbit/Data directory
      * @param $type - The type of the current field
      * @param $field - The name of the current field
-     * @param $seed - Number to be used as the seed for mt_srand()
      *
      * // DEV TESTING ONLY
      * @param bool $resetStatic
      *
      * @return string
      */
-    public function handleType($typeData, $type, $field, $seed, $resetStatic = false)
+    public function handleType($typeData, $type, $field, $resetStatic = false)
     {
-        /* We want all data to be predictable.  $seed should be charactaristic of
-         * this entity or the remote entity we want to simulate
-         */
-        mt_srand($seed);
-
         if (!empty($typeData['skip'])) {
             return '';
         }
@@ -370,10 +357,8 @@ class DataTool
         }
         if (!empty($typeData['same'])) {
             if (is_string($typeData['same']) && !empty($this->fields[$typeData['same']])) {
-                //return $this->accessLocalField($typeData['same']);
                 $rtn = $this->accessLocalField($typeData['same']);
             } else {
-                //return $typeData['same'];
                 $rtn = $typeData['same'];
             }
             if (!empty($typeData['toUpper'])) {
@@ -447,7 +432,7 @@ class DataTool
                 $startDate = $this->accessLocalField('date_start');
 
                 $stamp = strtotime(substr($startDate, 1, strlen($startDate) - 2));
-                if ($stamp >= mktime()) {
+                if ($stamp >= $GLOBALS['baseTime']) {
                     $rn = mt_rand(0, 9);
                     /* 10% chance of being NOT HELD - aka CLOSED */
                     if ($rn > 8) {
@@ -486,7 +471,7 @@ class DataTool
                 $isQuote = true;
 
                 $dateTime = new \DateTime();
-                $baseTime = (!empty($typeData['basetime'])) ? $typeData['basetime'] : time();
+                $baseTime = !empty($typeData['basetime']) ? $typeData['basetime'] : $GLOBALS['baseTime'];
 
                 $dateTime->setTimestamp($baseTime);
 
@@ -676,40 +661,25 @@ class DataTool
      * Returns the value of this module's field called $fieldname.
      *
      * If a value has already been generated, it uses that one, otherwise
-     * it calls getData() to generate the value.
+     * it calls generateFieldData() to generate the value.
      * @param $fieldName - Name of the local field you want to retrieve
      *
      * @return string
      */
     public function accessLocalField($fieldName)
     {
-        /* TODO - OPTIMIZATION - if we have to render the data,
-         * then save it to installData so we only do it once.
-         * Make sure that generateData checks for it.
-         * Note that this is safe even when used as a foreign
-         * object, becuase accessRemoteField calls clean each time.
-         */
         /* We will only deal with fields defined in the
          * vardefs.
          */
         if (!empty($this->fields[$fieldName])) {
-            /* If this data has already been generated,
-             * then just use it.
-             */
-            if (!empty($this->installData[$fieldName])) {
-                return $this->installData[$fieldName];
-                /* Otherwise, we have to pre-render it. */
-            } else {
-                $recSeed = $this->generateSeed($this->module, $fieldName, $this->count);
-                $recData = $this->fields[$fieldName];
-                $recType = (!empty($recData['dbType'])) ? $recData['dbType'] : $recData['type'];
-                return $this->getData($fieldName, $recType, $recData['type'], $recSeed);
+            if (!isset($this->installData[$fieldName])) {
+                $this->generateFieldData($fieldName);
             }
+            return $this->installData[$fieldName];
         } else {
             return $fieldName;
         }
     }
-
 
     /**
      * Returns the value of $module's field called $fieldName.
@@ -826,55 +796,6 @@ class DataTool
         return implode(' ', $resWords);
     }
 
-    /*
-     * TODO - OPTIMIZATION - cache sums of $fieldName and $this->module
-     * somewhere, sessions maybe.
-     * DONE: cache in static properties
-     */
-    /**
-     * Returns a seed to be used with the RNG.
-     *
-     * @param string $module - The current module
-     * @param string $field - The current field
-     * @param int $count - The current record number
-     * @return int
-     */
-    public function generateSeed($module, $field, $count)
-    {
-        // Cache module
-        if (!isset(self::$seedModules[$module])) {
-            self::$seedModules[$module] = $this->stringCheckSum($this->module);
-        }
-
-        // Cache fields
-        if (!isset(self::$seedFields[$field])) {
-            self::$seedFields[$field] = $this->stringCheckSum($field);
-        }
-
-        /*
-         * We multiply by two because mt_srand
-         * doesn't work well when you give it
-         * consecutive integers.
-         */
-        return 2 * (self::$seedModules[$module] + self::$seedFields[$field] + $count + $GLOBALS['baseTime']);
-    }
-
-    /**
-     * Calculate string check sum
-     *
-     * @param $str
-     * @return int
-     */
-    public function stringCheckSum($str)
-    {
-        $sum = 0;
-
-        for ($i = strlen($str); $i--;) {
-            $sum += ord($str[$i]);
-        }
-
-        return $sum;
-    }
 
     /**
      * Calculate datetime shift depending on type

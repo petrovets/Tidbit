@@ -151,7 +151,8 @@ class Intervals
          *
          * Such a module must exist.
          */
-        if (!empty($modules[$relModule])) {
+        
+        if (!empty($modules[$relModule]) && array_key_exists($curModule, $modules)) {
             $baseToRelatedRatio = $modules[$relModule] / $modules[$baseModule];
             $baseToThisRatio = $modules[$curModule] / $modules[$baseModule];
 
@@ -207,6 +208,6 @@ class Intervals
     public function getRandomInterval($module)
     {
         $modules = $this->config->get('modules');
-        return rand(0, $modules[$module] - 1);
+        return mt_rand(0, $modules[$module] - 1);
     }
 }

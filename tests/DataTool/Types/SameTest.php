@@ -46,11 +46,11 @@ class SameTest extends TidbitTestCase
             )
         ));
 
-        $this->dataTool->fields = array(
+        $this->dataTool->setFields([
             'field1' => 'field1',
             'field2' => 'field2',
-            'field3' => 'field3',
-        );
+            'field3' => 'field3'
+        ]);
 
         $this->dataTool->installData = array(
             'field1' => 10,
@@ -58,7 +58,7 @@ class SameTest extends TidbitTestCase
             'field3' => 33,
         );
 
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
         $this->assertEquals(63, $actual);
     }
 
@@ -68,14 +68,14 @@ class SameTest extends TidbitTestCase
     public function testSameType()
     {
         $type = array('same' => 'field1');
-        $this->dataTool->fields = array(
-            'field1' => 'field1',
-        );
+        $this->dataTool->setFields([
+            'field1' => 'field1'
+        ]);
 
         $expected = 'some_test_value';
         $this->dataTool->installData['field1'] = $expected;
 
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
         $this->assertEquals($expected, $actual);
     }
 
@@ -88,7 +88,7 @@ class SameTest extends TidbitTestCase
 
         $expected = 20;
 
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
         $this->assertEquals($expected, $actual);
     }
 
@@ -98,14 +98,14 @@ class SameTest extends TidbitTestCase
     public function testSameValueTrimType()
     {
         $type = array('same' => 'field1');
-        $this->dataTool->fields = array(
-            'field1' => 'field1',
-        );
+        $this->dataTool->setFields([
+            'field1' => 'field1'
+        ]);
 
         $expected = '   some_test_value   ';
         $this->dataTool->installData['field1'] = $expected;
 
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
         $this->assertEquals('some_test_value', $actual);
     }
 
@@ -115,14 +115,14 @@ class SameTest extends TidbitTestCase
     public function testSameToUpperType()
     {
         $type = array('same' => 'field1', 'toUpper' => true);
-        $this->dataTool->fields = array(
-            'field1' => 'field1',
-        );
+        $this->dataTool->setFields([
+            'field1' => 'field1'
+        ]);
 
         $expected = 'some_test_value';
         $this->dataTool->installData['field1'] = $expected;
 
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
         $this->assertEquals(strtoupper($expected), $actual);
     }
 
@@ -132,14 +132,14 @@ class SameTest extends TidbitTestCase
     public function testSameToLowerType()
     {
         $type = array('same' => 'field1', 'toLower' => true);
-        $this->dataTool->fields = array(
-            'field1' => 'field1',
-        );
+        $this->dataTool->setFields([
+            'field1' => 'field1'
+        ]);
 
         $expected = 'some_TesT_value';
         $this->dataTool->installData['field1'] = $expected;
 
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
         $this->assertEquals(strtolower($expected), $actual);
     }
 
@@ -151,13 +151,13 @@ class SameTest extends TidbitTestCase
     public function testSameHashType()
     {
         $type = array('same_hash' => 'field1');
-        $this->dataTool->fields = array(
-            'field1' => 'field1',
-        );
+        $this->dataTool->setFields([
+            'field1' => 'field1'
+        ]);
 
         $expected = 'field1 value';
         $this->dataTool->installData['field1'] = "'" . $expected . "'";
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
 
         $this->assertIsQuoted($actual);
         $this->assertEquals("'" . md5($expected) . "'", $actual);
@@ -171,13 +171,13 @@ class SameTest extends TidbitTestCase
     public function testSameHashIntegerType()
     {
         $type = array('same_hash' => 'field1');
-        $this->dataTool->fields = array(
-            'field1' => 'field1',
-        );
+        $this->dataTool->setFields([
+            'field1' => 'field1'
+        ]);
 
         $expected = 20;
         $this->dataTool->installData['field1'] = $expected;
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
 
         $this->assertIsQuoted($actual);
         $this->assertEquals("'" . md5($expected) . "'", $actual);
@@ -193,7 +193,7 @@ class SameTest extends TidbitTestCase
         $type = array('same_hash' => 20);
 
         $expected = 20;
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
 
         $this->assertIsQuoted($actual);
         $this->assertEquals("'" . md5($expected) . "'", $actual);
@@ -209,9 +209,9 @@ class SameTest extends TidbitTestCase
     public function testSameSugarHashType()
     {
         $type = array('same_sugar_hash' => 'field1');
-        $this->dataTool->fields = array(
-            'field1' => 'field1',
-        );
+        $this->dataTool->setFields([
+            'field1' => 'field1'
+        ]);
 
         $GLOBALS['sugar_config'] = array('sugar_version' => '7.6.2');
 
@@ -220,7 +220,7 @@ class SameTest extends TidbitTestCase
         // Expected that value in installData will be quoted
         $this->dataTool->installData['field1'] = "'" . $expected . "'";
 
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
 
         $this->assertIsQuoted($actual);
         $this->assertEquals(md5($expected), $this->removeQuotes($actual));

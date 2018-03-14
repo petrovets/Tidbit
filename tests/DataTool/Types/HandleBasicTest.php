@@ -32,7 +32,7 @@ class HandleBasicTest extends TidbitTestCase
     public function testSkippedType()
     {
         $type = array('skip' => true);
-        $actual = $this->dataTool->handleType($type, '', '', time());
+        $actual = $this->dataTool->handleType($type, '', '');
 
         $this->assertEquals('', $actual, '"skip" flag should return empty value');
     }
@@ -47,7 +47,7 @@ class HandleBasicTest extends TidbitTestCase
     public function testValueType($value, $expected)
     {
         $type = array('value' => $value);
-        $actual = $this->dataTool->handleType($type, '', '', time());
+        $actual = $this->dataTool->handleType($type, '', '');
 
         $this->assertEquals($expected, $actual, '"value" flag should return value if it is not empty or "0" value');
     }
@@ -74,7 +74,7 @@ class HandleBasicTest extends TidbitTestCase
         $binaryValues = array('First', 'Second');
         $type = array('binary_enum' => $binaryValues);
 
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
         $this->assertEquals('First', $actual);
     }
 
@@ -88,7 +88,7 @@ class HandleBasicTest extends TidbitTestCase
 
         for ($i = 0; $i < 5; $i++) {
             // Reset static variables for first time call only
-            $actual = $this->dataTool->handleType($type, '', '', time(), $i == 0);
+            $actual = $this->dataTool->handleType($type, '', '', $i == 0);
             $this->assertEquals($binaryValues[$i % 2], $actual);
         }
     }
@@ -102,11 +102,11 @@ class HandleBasicTest extends TidbitTestCase
 
         $type = array('sum' => array('subtotal', 'shipping', 'tax'));
 
-        $this->dataTool->fields = array(
+        $this->dataTool->setFields([
             'subtotal' => 'subtotal',
             'shipping' => 'shipping',
-            'tax'      => 'tax',
-        );
+            'tax'      => 'tax'
+        ]);
 
         $this->dataTool->installData = array(
             'subtotal' => 10,
@@ -114,7 +114,7 @@ class HandleBasicTest extends TidbitTestCase
             'tax'      => 33,
         );
 
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
         $this->assertEquals(63, $actual);
     }
 
@@ -127,11 +127,11 @@ class HandleBasicTest extends TidbitTestCase
 
         $type = array('sum' => array('subtotal', 'shipping', 'tax'));
 
-        $this->dataTool->fields = array(
+        $this->dataTool->setFields([
             'subtotal' => 'subtotal',
             'shipping' => 'shipping',
-            'tax'      => 'tax',
-        );
+            'tax'      => 'tax'
+        ]);
 
         $this->dataTool->installData = array(
             'subtotal' => 10,
@@ -139,7 +139,7 @@ class HandleBasicTest extends TidbitTestCase
             'tax'      => 33,
         );
 
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
         $this->assertEquals(43, $actual);
     }
 
@@ -152,17 +152,17 @@ class HandleBasicTest extends TidbitTestCase
 
         $type = array('sum' => array('subtotal', 20, 'tax'));
 
-        $this->dataTool->fields = array(
+        $this->dataTool->setFields([
             'subtotal' => 'subtotal',
-            'tax'      => 'tax',
-        );
+            'tax'      => 'tax'
+        ]);
 
         $this->dataTool->installData = array(
             'subtotal' => 10,
             'tax'      => 33,
         );
 
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
         $this->assertEquals(63, $actual);
     }
 
@@ -174,7 +174,7 @@ class HandleBasicTest extends TidbitTestCase
         $this->dataTool->module = 'Contacts';
         $type = array('getmodule' => true);
 
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
         $this->assertEquals("'Contacts'", $actual);
     }
 
@@ -185,7 +185,7 @@ class HandleBasicTest extends TidbitTestCase
     {
         $type = array('gibberish' => 10);
 
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
 
         // actual will be text with 10 words separated by space char
         $this->assertCount(10, explode(' ', $actual));
@@ -200,7 +200,7 @@ class HandleBasicTest extends TidbitTestCase
         $type = array('gibberish' => 100);
         $GLOBALS['fieldData'] = array('len' => 20);
 
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
 
         $this->assertIsQuoted($actual);
 
@@ -216,7 +216,7 @@ class HandleBasicTest extends TidbitTestCase
         $type = array('gibberish' => 100);
         $GLOBALS['fieldData'] = array('len' => '10,2');
 
-        $actual = $this->dataTool->handleType($type, '', '', time(), true);
+        $actual = $this->dataTool->handleType($type, '', '', true);
 
         $this->assertIsQuoted($actual);
 
